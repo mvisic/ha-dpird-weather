@@ -1,12 +1,10 @@
 {
-  "domain": "integration_blueprint",
-  "name": "Integration blueprint",
-  "codeowners": [
-    "@ludeeus"
-  ],
-  "config_flow": true,
-  "documentation": "https://github.com/ludeeus/integration_blueprint",
+  "domain": "dpird_weather",
+  "name": "DPIRD Weather",
+  "codeowners": [],
+  "dependencies": [],
+  "documentation": "https://github.com/your-username/ha-dpird-weather",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/ludeeus/integration_blueprint/issues",
-  "version": "0.1.0"
+  "issue_tracker": "https://github.com/your-username/ha-dpird-weather/issues",
+  "requirements": []
 }
