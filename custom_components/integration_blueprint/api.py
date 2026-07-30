@@ -1,138 +1,32 @@
-"""Sample API Client."""
-
-from __future__ import annotations
-
-import asyncio
-import math
-import socket
-from contextlib import suppress
-from http import HTTPStatus
-from typing import Any
-
+"""API client for DPIRD Weather."""
+from datetime import datetime
 import aiohttp
+from .const import API_DAILY, API_LATEST
 
+class DPIRDApiClient:
+    """Client to handle DPIRD requests."""
 
-class IntegrationBlueprintApiClientError(Exception):
-    """Exception to indicate a general API error."""
-
-
-class IntegrationBlueprintApiClientCommunicationError(
-    IntegrationBlueprintApiClientError,
-):
-    """Exception to indicate a communication error."""
-
-
-class IntegrationBlueprintApiClientAuthenticationError(
-    IntegrationBlueprintApiClientError,
-):
-    """Exception to indicate an authentication error."""
-
-
-class IntegrationBlueprintApiClientRateLimitError(
-    IntegrationBlueprintApiClientCommunicationError,
-):
-    """Exception to indicate the API is rate limiting us."""
-
-    def __init__(self, message: str, retry_after: int | None = None) -> None:
-        """Store the backoff period requested by the API."""
-        super().__init__(message)
-        self.retry_after = retry_after
-
-
-def _parse_retry_after(response: aiohttp.ClientResponse) -> int:
-    """Return the backoff period (whole seconds) from the Retry-After header."""
-    value: float | None = None
-    retry_after = response.headers.get("Retry-After")
-    if retry_after is not None:
-        with suppress(ValueError):
-            value = float(retry_after)
-    if value is not None and math.isfinite(value) and value >= 0:
-        return math.ceil(value)
-    return 60
-
-
-def _verify_response_or_raise(response: aiohttp.ClientResponse) -> None:
-    """Verify that the response is valid."""
-    if response.status in (401, 403):
-        msg = "Invalid credentials"
-        raise IntegrationBlueprintApiClientAuthenticationError(
-            msg,
-        )
-    if response.status == HTTPStatus.TOO_MANY_REQUESTS:
-        msg = "Rate limited by the API"
-        raise IntegrationBlueprintApiClientRateLimitError(
-            msg,
-            retry_after=_parse_retry_after(response),
-        )
-    response.raise_for_status()
-
-
-class IntegrationBlueprintApiClient:
-    """Sample API Client."""
-
-    def __init__(
-        self,
-        username: str,
-        password: str,
-        session: aiohttp.ClientSession,
-    ) -> None:
-        """Sample API Client."""
-        self._username = username
-        self._password = password
+    def __init__(self, api_key: str, station_code: str, session: aiohttp.ClientSession) -> None:
+        self._api_key = api_key
+        self._station_code = station_code
         self._session = session
 
-    async def async_get_data(self) -> Any:
-        """Get data from the API."""
-        return await self._api_wrapper(
-            method="get",
-            url="https://jsonplaceholder.typicode.com/posts/1",
-        )
+    async def async_get_data(self) -> dict:
+        """Fetch latest weather and daily summaries concurrently."""
+        headers = {"accept": "application/json", "API-KEY": self._api_key}
+        today = datetime.now().strftime("%Y-%m-%d")
 
-    async def async_set_title(self, value: str) -> Any:
-        """Get data from the API."""
-        return await self._api_wrapper(
-            method="patch",
-            url="https://jsonplaceholder.typicode.com/posts/1",
-            data={"title": value},
-            headers={"Content-type": "application/json; charset=UTF-8"},
-        )
+        latest_url = API_LATEST.format(station=self._station_code)
+        daily_url = API_DAILY.format(station=self._station_code, date=today)
 
-    async def _api_wrapper(
-        self,
-        method: str,
-        url: str,
-        data: dict | None = None,
-        headers: dict | None = None,
-    ) -> Any:
-        """Get information from the API."""
-        try:
-            async with asyncio.timeout(10):
-                response = await self._session.request(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    json=data,
-                )
-                _verify_response_or_raise(response)
-                return await response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(latest_url, headers=headers) as latest_resp:
+                latest_data = await latest_resp.json() if latest_resp.status == 200 else {}
 
-        except TimeoutError as exception:
-            msg = f"Timeout error fetching information - {exception}"
-            raise IntegrationBlueprintApiClientCommunicationError(
-                msg,
-            ) from exception
-        except (aiohttp.ClientError, socket.gaierror) as exception:
-            msg = f"Error fetching information - {exception}"
-            raise IntegrationBlueprintApiClientCommunicationError(
-                msg,
-            ) from exception
-        except IntegrationBlueprintApiClientError:
-            # Our own typed errors (auth, rate-limit, communication) are already
-            # meaningful; re-raise so callers can branch on them instead of masking
-            # them with the broad handler below.
-            raise
-        except Exception as exception:  # pylint: disable=broad-except
-            msg = f"Something really wrong happened! - {exception}"
-            raise IntegrationBlueprintApiClientError(
-                msg,
-            ) from exception
+            async with session.get(daily_url, headers=headers) as daily_resp:
+                daily_data = await daily_resp.json() if daily_resp.status == 200 else {}
+
+        return {
+            "latest": latest_data.get("data", {}),
+            "daily": daily_data.get("data", [{}])[0] if daily_data.get("data") else {},
+        }
