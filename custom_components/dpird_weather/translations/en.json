@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "DPIRD Weather",
-        "description": "Enter your DPIRD Weather API key. You can request one from the [DPIRD API page](https://weather.agric.wa.gov.au/developer-api).",
+        "description": "Enter your DPIRD Weather API key. You can request one from the [DPIRD API page]({api_url}).",
         "data": {
           "api_key": "API key"
         }
