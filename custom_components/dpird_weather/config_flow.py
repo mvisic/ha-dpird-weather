@@ -26,6 +26,7 @@ from .api import (
 )
 from .const import CONF_STATION, CONF_STATION_NAME, DOMAIN, LOGGER
 
+API_KEY_URL = "https://weather.agric.wa.gov.au/developer-api"
 
 class DPIRDConfigFlow(ConfigFlow, domain=DOMAIN):
     """Ask for an API key, then let the user pick a weather station."""
