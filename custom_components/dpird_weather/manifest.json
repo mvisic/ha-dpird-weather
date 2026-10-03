@@ -1,0 +1,13 @@
+{
+  "domain": "dpird_weather",
+  "name": "DPIRD Weather",
+  "codeowners": ["@mvisic"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/mvisic/ha-dpird-weather",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/mvisic/ha-dpird-weather/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

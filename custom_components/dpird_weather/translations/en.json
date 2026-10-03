@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "DPIRD Weather",
+        "description": "Enter your DPIRD Weather API key. You can request one from the [DPIRD API page](https://weather.agric.wa.gov.au/developer-api).",
+        "data": {
+          "api_key": "API key"
+        }
+      },
+      "station": {
+        "title": "Choose a weather station",
+        "description": "Pick the DPIRD weather station to monitor. Add the integration again to monitor more stations.",
+        "data": {
+          "station_code": "Weather station"
+        }
+      }
+    },
+    "error": {
+      "auth": "The API key was rejected.",
+      "connection": "Unable to connect to the DPIRD API.",
+      "no_stations": "No weather stations were returned for this API key.",
+      "unknown": "Unknown error occurred."
+    },
+    "abort": {
+      "already_configured": "This weather station is already configured."
+    }
+  }
+}
