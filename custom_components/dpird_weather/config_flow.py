@@ -77,6 +77,7 @@ class DPIRDConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+            description_placeholders={"api_url": API_KEY_URL},
         )
 
     async def async_step_station(
