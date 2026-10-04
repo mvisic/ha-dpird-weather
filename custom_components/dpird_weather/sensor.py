@@ -12,6 +12,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    DEGREE,
     PERCENTAGE,
     UnitOfElectricPotential,
     UnitOfIrradiance,
@@ -37,6 +38,7 @@ PARALLEL_UPDATES = 0
 TEMP = UnitOfTemperature.CELSIUS
 MM = UnitOfLength.MILLIMETERS
 KMH = UnitOfSpeed.KILOMETERS_PER_HOUR
+DEG = DEGREE
 MEASUREMENT = SensorStateClass.MEASUREMENT
 
 # Sensors enabled by default; everything else is available but disabled.
@@ -49,6 +51,9 @@ DEFAULT_ENABLED = {
     ("latest", "rainfallSince9AM"),
     ("latest", "windAvgSpeed"),
     ("latest", "windMaxSpeed"),
+    ("latest", "windAvgDirectionDegrees"),
+    ("latest", "windAvgDirectionCompassPoint"),
+    ("latest", "sprayingConditions"),
     ("latest", "solarIrradiance"),
     ("latest", "soilTemperature"),
     ("daily", "airTemperatureMax"),
@@ -62,6 +67,15 @@ class DPIRDSensorEntityDescription(SensorEntityDescription):
     """Describes a DPIRD sensor."""
 
     data_type: str  # "latest" or "daily"
+
+
+ICONS = {
+    "windAvgDirectionDegrees": "mdi:compass",
+    "windAvgDirectionCompassPoint": "mdi:compass-outline",
+    "windMaxDirectionDegrees": "mdi:compass",
+    "windMaxDirectionCompassPoint": "mdi:compass-outline",
+    "sprayingConditions": "mdi:spray",
+}
 
 
 def _d(  # noqa: PLR0913
@@ -81,6 +95,7 @@ def _d(  # noqa: PLR0913
         device_class=device_class,
         state_class=state_class,
         entity_registry_enabled_default=(data_type, key) in DEFAULT_ENABLED,
+        icon=ICONS.get(key),
     )
 
 
@@ -133,6 +148,25 @@ SENSOR_DESCRIPTIONS: tuple[DPIRDSensorEntityDescription, ...] = (
     _d("latest", "wetBulb", "Wet bulb", TEMP, _T),
     _d("latest", "windAvgSpeed", "Wind average speed", KMH, _W),
     _d("latest", "windMaxSpeed", "Wind max speed", KMH, _W),
+    _d("latest", "windAvgDirectionDegrees", "Wind direction", DEG, None),
+    _d(
+        "latest",
+        "windAvgDirectionCompassPoint",
+        "Wind direction (compass)",
+        None,
+        None,
+        None,
+    ),
+    _d("latest", "windMaxDirectionDegrees", "Wind gust direction", DEG, None),
+    _d(
+        "latest",
+        "windMaxDirectionCompassPoint",
+        "Wind gust direction (compass)",
+        None,
+        None,
+        None,
+    ),
+    _d("latest", "sprayingConditions", "Spraying conditions", None, None, None),
     # --- Daily summary ---
     _d("daily", "airTemperatureAvg", "air temperature average", TEMP, _T),
     _d("daily", "airTemperatureMax", "air temperature max", TEMP, _T),
@@ -174,14 +208,6 @@ SENSOR_DESCRIPTIONS: tuple[DPIRDSensorEntityDescription, ...] = (
 def _api_key(description: DPIRDSensorEntityDescription) -> str:
     """Return the API field name for a description."""
     return description.key.split("_", 1)[1]
-
-
-def _keys(data_type: str) -> list[str]:
-    return [_api_key(d) for d in SENSOR_DESCRIPTIONS if d.data_type == data_type]
-
-
-LATEST_KEYS = _keys("latest")
-DAILY_KEYS = _keys("daily")
 
 
 async def async_setup_entry(
@@ -233,7 +259,10 @@ class DPIRDSensor(CoordinatorEntity["DPIRDCoordinator"], SensorEntity):
         if isinstance(value, dict):
             value = value.get("value")
         # Some fields (e.g. barometric pressure) can arrive as numeric strings.
-        if isinstance(value, str):
+        if (
+            isinstance(value, str)
+            and self.entity_description.native_unit_of_measurement is not None
+        ):
             try:
                 return float(value)
             except ValueError:
