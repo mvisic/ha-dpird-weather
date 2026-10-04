@@ -232,4 +232,10 @@ class DPIRDSensor(CoordinatorEntity["DPIRDCoordinator"], SensorEntity):
         # Some API fields are wrapped, e.g. {"value": 12.3}
         if isinstance(value, dict):
             value = value.get("value")
+        # Some fields (e.g. barometric pressure) can arrive as numeric strings.
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return None
         return value
