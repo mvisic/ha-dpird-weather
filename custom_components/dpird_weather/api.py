@@ -47,6 +47,47 @@ def _records(payload: Any) -> list[dict[str, Any]]:
     return records if isinstance(records, list) else []
 
 
+def _lowest_sensor(items: list[Any]) -> dict[str, Any] | None:
+    """Pick the lowest-height sensor from a list (e.g. wind), else the first."""
+    sensors = [i for i in items if isinstance(i, dict)]
+    if not sensors:
+        return None
+    with_height = [i for i in sensors if isinstance(i.get("height"), (int, float))]
+    return min(with_height, key=lambda i: i["height"]) if with_height else sensors[0]
+
+
+def _flatten(record: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+    """
+    Flatten nested records into camelCase keys.
+
+    {"airTemperature": {"max": 20}} becomes {"airTemperatureMax": 20}.
+    Sensor arrays such as wind use the lowest sensor, so
+    {"wind": [{"height": 3, "avg": {"speed": 5}}]} becomes {"windAvgSpeed": 5}.
+    """
+    flat: dict[str, Any] = {}
+    for key, value in record.items():
+        name = f"{prefix}{key[:1].upper()}{key[1:]}" if prefix else key
+        if isinstance(value, list):
+            value = _lowest_sensor(value)  # noqa: PLW2901
+        if isinstance(value, dict):
+            flat.update(_flatten(value, name))
+        elif value is not None or name not in flat:
+            flat[name] = value
+    return flat
+
+
+def _first_summary(payload: Any) -> dict[str, Any]:
+    """Return the first summary from a daily summary response."""
+    if not isinstance(payload, dict):
+        return {}
+    container = payload.get("data")
+    if container is None:
+        collection = payload.get("collection")
+        container = collection[0] if collection else {}
+    summaries = container.get("summaries") if isinstance(container, dict) else None
+    return summaries[0] if summaries else {}
+
+
 class DPIRDApiClient:
     """Client for the DPIRD Weather 2.0 API."""
 
@@ -107,7 +148,7 @@ class DPIRDApiClient:
             f"/{station_code}/latest", {"select": ",".join(sorted(set(keys)))}
         )
         records = _records(payload)
-        return records[0] if records else {}
+        return _flatten(records[0]) if records else {}
 
     async def async_get_daily(
         self, station_code: str, keys: Iterable[str]
@@ -115,16 +156,14 @@ class DPIRDApiClient:
         """Return today's daily summary for a station (Perth time)."""
         today = datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d")
         payload = await self._get(
-            "/summaries/daily",
+            f"/{station_code}/summaries/daily",
             {
                 "startDate": today,
                 "endDate": today,
-                "stationCode": station_code,
                 "offset": 0,
-                "limit": 25,
-                "includeClosed": "false",
+                "limit": 1,
                 "select": ",".join(sorted(set(keys))),
             },
         )
-        records = _records(payload)
-        return records[0] if records else {}
+        summary = _first_summary(payload)
+        return _flatten(summary) if summary else {}
