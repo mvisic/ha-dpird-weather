@@ -43,11 +43,8 @@ class DPIRDCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         """Fetch data from the API."""
-        # Imported here to avoid a circular import with sensor.py
-        from .sensor import DAILY_KEYS, LATEST_KEYS  # noqa: PLC0415
-
         try:
-            latest = await self.client.async_get_latest(self.station_code, LATEST_KEYS)
+            latest = await self.client.async_get_latest(self.station_code)
         except DPIRDApiClientAuthenticationError as exception:
             raise ConfigEntryAuthFailed(exception) from exception
         except DPIRDApiClientError as exception:
@@ -55,11 +52,12 @@ class DPIRDCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
         # The daily summary is a bonus - don't fail the update if it's missing.
         try:
-            daily = await self.client.async_get_daily(self.station_code, DAILY_KEYS)
+            daily = await self.client.async_get_daily(self.station_code)
         except DPIRDApiClientError as exception:
             LOGGER.debug("Daily summary unavailable: %s", exception)
             daily = {}
 
         LOGGER.debug("Latest keys: %s", sorted(latest))
+        LOGGER.debug("Raw barometricPressure: %r", latest.get("barometricPressure"))
         LOGGER.debug("Daily keys: %s", sorted(daily))
         return {"latest": latest, "daily": daily}
