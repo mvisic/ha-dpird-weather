@@ -5,15 +5,12 @@ from __future__ import annotations
 import asyncio
 import socket
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import aiohttp
 
 from .const import API_BASE, TIMEZONE
-
-if TYPE_CHECKING:
-    from collections.abc import Iterable
 
 PAGE_SIZE = 200
 HTTP_UNAUTHORISED = 401
@@ -140,19 +137,13 @@ class DPIRDApiClient:
                 return stations
             offset += PAGE_SIZE
 
-    async def async_get_latest(
-        self, station_code: str, keys: Iterable[str]
-    ) -> dict[str, Any]:
-        """Return the latest observations for a station."""
-        payload = await self._get(
-            f"/{station_code}/latest", {"select": ",".join(sorted(set(keys)))}
-        )
+    async def async_get_latest(self, station_code: str) -> dict[str, Any]:
+        """Return the latest observations for a station (all fields)."""
+        payload = await self._get(f"/{station_code}/latest", {})
         records = _records(payload)
         return _flatten(records[0]) if records else {}
 
-    async def async_get_daily(
-        self, station_code: str, keys: Iterable[str]
-    ) -> dict[str, Any]:
+    async def async_get_daily(self, station_code: str) -> dict[str, Any]:
         """Return today's daily summary for a station (Perth time)."""
         today = datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d")
         payload = await self._get(
@@ -162,7 +153,6 @@ class DPIRDApiClient:
                 "endDate": today,
                 "offset": 0,
                 "limit": 1,
-                "select": ",".join(sorted(set(keys))),
             },
         )
         summary = _first_summary(payload)
