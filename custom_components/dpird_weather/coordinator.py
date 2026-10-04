@@ -60,4 +60,6 @@ class DPIRDCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             LOGGER.debug("Daily summary unavailable: %s", exception)
             daily = {}
 
+        LOGGER.debug("Latest keys: %s", sorted(latest))
+        LOGGER.debug("Daily keys: %s", sorted(daily))
         return {"latest": latest, "daily": daily}
