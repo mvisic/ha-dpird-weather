@@ -24,6 +24,7 @@ from homeassistant.const import (
 )
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import ATTRIBUTION, CONF_STATION_NAME, DOMAIN
 
@@ -34,6 +35,9 @@ if TYPE_CHECKING:
     from .coordinator import DPIRDConfigEntry, DPIRDCoordinator
 
 PARALLEL_UPDATES = 0
+
+# Fields only some stations measure; no entity is created if the value is null.
+OPTIONAL_KEYS = {"barometricPressure"}
 
 TEMP = UnitOfTemperature.CELSIUS
 MM = UnitOfLength.MILLIMETERS
@@ -54,6 +58,7 @@ DEFAULT_ENABLED = {
     ("latest", "windAvgDirectionDegrees"),
     ("latest", "windAvgDirectionCompassPoint"),
     ("latest", "sprayingConditions"),
+    ("latest", "dateTime"),
     ("latest", "solarIrradiance"),
     ("latest", "soilTemperature"),
     ("daily", "airTemperatureMax"),
@@ -167,6 +172,36 @@ SENSOR_DESCRIPTIONS: tuple[DPIRDSensorEntityDescription, ...] = (
         None,
     ),
     _d("latest", "sprayingConditions", "Spraying conditions", None, None, None),
+    _d(
+        "latest",
+        "frostConditionSince9AMMinutes",
+        "Frost condition since 9AM",
+        UnitOfTime.MINUTES,
+    ),
+    _d(
+        "latest",
+        "heatConditionSince12AMMinutes",
+        "Heat condition since 12AM",
+        UnitOfTime.MINUTES,
+    ),
+    _d(
+        "latest",
+        "erosionConditionSince12AMMinutes",
+        "Erosion condition since 12AM",
+        UnitOfTime.MINUTES,
+    ),
+    _d(
+        "latest",
+        "dateTime",
+        "Last observation",
+        None,
+        SensorDeviceClass.TIMESTAMP,
+        None,
+    ),
+    _d("daily", "richardsonUnits", "Richardson units", None),
+    _d("daily", "frostConditionMinutes", "frost condition", UnitOfTime.MINUTES),
+    _d("daily", "heatConditionMinutes", "heat condition", UnitOfTime.MINUTES),
+    _d("daily", "erosionConditionMinutes", "erosion condition", UnitOfTime.MINUTES),
     # --- Daily summary ---
     _d("daily", "airTemperatureAvg", "air temperature average", TEMP, _T),
     _d("daily", "airTemperatureMax", "air temperature max", TEMP, _T),
@@ -174,9 +209,7 @@ SENSOR_DESCRIPTIONS: tuple[DPIRDSensorEntityDescription, ...] = (
     _d("daily", "apparentAirTemperatureAvg", "apparent temperature average", TEMP, _T),
     _d("daily", "apparentAirTemperatureMax", "apparent temperature max", TEMP, _T),
     _d("daily", "apparentAirTemperatureMin", "apparent temperature min", TEMP, _T),
-    _d("daily", "barometricPressureAvg", "barometric pressure average", _HPA, _PR),
-    _d("daily", "barometricPressureMax", "barometric pressure max", _HPA, _PR),
-    _d("daily", "barometricPressureMin", "barometric pressure min", _HPA, _PR),
+    _d("daily", "barometricPressure", "barometric pressure", _HPA, _PR),
     _d("daily", "batteryMinVoltage", "battery min voltage", _VOLT, _V),
     _d("daily", "chillHours", "chill hours", UnitOfTime.HOURS),
     _d("daily", "deltaTAvg", "Delta T average", TEMP),
@@ -185,7 +218,6 @@ SENSOR_DESCRIPTIONS: tuple[DPIRDSensorEntityDescription, ...] = (
     _d("daily", "dewPointAvg", "dew point average", TEMP, _T),
     _d("daily", "dewPointMax", "dew point max", TEMP, _T),
     _d("daily", "dewPointMin", "dew point min", TEMP, _T),
-    _d("daily", "evapotranspiration", "evapotranspiration", MM),
     _d("daily", "evapotranspirationShortCrop", "ETo short crop", MM),
     _d("daily", "evapotranspirationTallCrop", "ETo tall crop", MM),
     _d("daily", "panEvaporation", "pan evaporation", MM),
@@ -196,7 +228,7 @@ SENSOR_DESCRIPTIONS: tuple[DPIRDSensorEntityDescription, ...] = (
     _d("daily", "soilTemperatureAvg", "soil temperature average", TEMP, _T),
     _d("daily", "soilTemperatureMax", "soil temperature max", TEMP, _T),
     _d("daily", "soilTemperatureMin", "soil temperature min", TEMP, _T),
-    _d("daily", "solarExposure", "solar exposure", _MJ),
+    _d("daily", "solarExposure", "solar exposure", "kJ/m²"),
     _d("daily", "wetBulbAvg", "wet bulb average", TEMP, _T),
     _d("daily", "wetBulbMax", "wet bulb max", TEMP, _T),
     _d("daily", "wetBulbMin", "wet bulb min", TEMP, _T),
@@ -217,9 +249,20 @@ async def async_setup_entry(
 ) -> None:
     """Set up DPIRD sensors from a config entry."""
     coordinator = entry.runtime_data
+    data = coordinator.data or {}
+
+    def _present(description: DPIRDSensorEntityDescription) -> bool:
+        """Skip optional hardware (e.g. barometer) the station doesn't report."""
+        if _api_key(description) not in OPTIONAL_KEYS:
+            return True
+        return (
+            data.get(description.data_type, {}).get(_api_key(description)) is not None
+        )
+
     async_add_entities(
         DPIRDSensor(coordinator, entry, description)
         for description in SENSOR_DESCRIPTIONS
+        if _present(description)
     )
 
 
@@ -258,6 +301,8 @@ class DPIRDSensor(CoordinatorEntity["DPIRDCoordinator"], SensorEntity):
         # Some API fields are wrapped, e.g. {"value": 12.3}
         if isinstance(value, dict):
             value = value.get("value")
+        if self.entity_description.device_class == SensorDeviceClass.TIMESTAMP:
+            return dt_util.parse_datetime(value) if isinstance(value, str) else None
         # Some fields (e.g. barometric pressure) can arrive as numeric strings.
         if (
             isinstance(value, str)
